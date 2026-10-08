@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Ubiety.Nbt.Serialization.Metadata;
 
 namespace Ubiety.Nbt.Serialization;
 
@@ -20,11 +21,82 @@ namespace Ubiety.Nbt.Serialization;
 /// Numeric members accept any integer tag when deserializing, with overflow checking, since Minecraft has changed
 /// the stored width of some values between versions. <see cref="Guid"/> maps to Minecraft's four-int UUID format.
 /// </para>
+/// <para>
+/// The overloads taking <see cref="NbtSerializerOptions"/> use reflection. For trimmed or Native AOT apps, use the
+/// overloads taking an <see cref="NbtTypeInfo{T}"/> from a source-generated <see cref="NbtSerializerContext"/>,
+/// which behave identically.
+/// </para>
 /// </remarks>
 public static class NbtSerializer
 {
     internal const string ReflectionWarning =
-        "NBT serialization uses reflection over the serialized types, which may be trimmed or need runtime code generation.";
+        "NBT serialization uses reflection over the serialized types, which may be trimmed or need runtime code generation. " +
+        "Use the overloads taking an NbtTypeInfo<T> from a source-generated NbtSerializerContext instead.";
+
+    /// <summary>Serializes an object to a compound using source-generated metadata.</summary>
+    /// <typeparam name="T">The type to serialize as.</typeparam>
+    /// <param name="value">The object.</param>
+    /// <param name="typeInfo">The metadata, e.g. <c>MyContext.Default.Player</c>.</param>
+    /// <returns>The compound.</returns>
+    /// <exception cref="InvalidOperationException"><typeparamref name="T"/> does not serialize to a compound.</exception>
+    /// <exception cref="NbtSerializationException">The object cannot be represented, e.g. a collection contains null.</exception>
+    public static NbtCompound Serialize<T>(T value, NbtTypeInfo<T> typeInfo) =>
+        SerializeToTag(value, typeInfo) as NbtCompound ??
+        throw new InvalidOperationException($"{typeof(T)} does not serialize to a compound. Use SerializeToTag instead.");
+
+    /// <summary>Serializes a value to whichever tag type represents it, using source-generated metadata.</summary>
+    /// <typeparam name="T">The type to serialize as.</typeparam>
+    /// <param name="value">The value.</param>
+    /// <param name="typeInfo">The metadata, e.g. <c>MyContext.Default.ListItem</c>.</param>
+    /// <returns>The tag.</returns>
+    /// <exception cref="NbtSerializationException">The value cannot be represented, e.g. a collection contains null.</exception>
+    public static NbtTag SerializeToTag<T>(T value, NbtTypeInfo<T> typeInfo)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(typeInfo);
+        return typeInfo.Serialize(value, new NbtSerializationState(typeInfo.Options));
+    }
+
+    /// <summary>Deserializes a value from a tag using source-generated metadata.</summary>
+    /// <typeparam name="T">The type to create.</typeparam>
+    /// <param name="tag">The tag.</param>
+    /// <param name="typeInfo">The metadata, e.g. <c>MyContext.Default.Player</c>.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="NbtSerializationException">The tag does not match <typeparamref name="T"/>.</exception>
+    public static T Deserialize<T>(NbtTag tag, NbtTypeInfo<T> typeInfo)
+    {
+        ArgumentNullException.ThrowIfNull(tag);
+        ArgumentNullException.ThrowIfNull(typeInfo);
+        return typeInfo.Deserialize(tag, new NbtSerializationState(typeInfo.Options));
+    }
+
+    /// <summary>Serializes a value to a tag using a source-generated context.</summary>
+    /// <param name="value">The value.</param>
+    /// <param name="type">The type to serialize as.</param>
+    /// <param name="context">The context, which must include <paramref name="type"/>.</param>
+    /// <returns>The tag.</returns>
+    /// <exception cref="ArgumentException"><paramref name="context"/> does not include <paramref name="type"/>.</exception>
+    /// <exception cref="NbtSerializationException">The value cannot be represented, e.g. a collection contains null.</exception>
+    public static NbtTag SerializeToTag(object value, Type type, NbtSerializerContext context)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        var typeInfo = GetTypeInfo(type, context);
+        return typeInfo.SerializeAsObject(value, new NbtSerializationState(typeInfo.Options));
+    }
+
+    /// <summary>Deserializes a value from a tag using a source-generated context.</summary>
+    /// <param name="tag">The tag.</param>
+    /// <param name="type">The type to create.</param>
+    /// <param name="context">The context, which must include <paramref name="type"/>.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="ArgumentException"><paramref name="context"/> does not include <paramref name="type"/>.</exception>
+    /// <exception cref="NbtSerializationException">The tag does not match <paramref name="type"/>.</exception>
+    public static object Deserialize(NbtTag tag, Type type, NbtSerializerContext context)
+    {
+        ArgumentNullException.ThrowIfNull(tag);
+        var typeInfo = GetTypeInfo(type, context);
+        return typeInfo.DeserializeAsObject(tag, new NbtSerializationState(typeInfo.Options))!;
+    }
 
     /// <summary>Serializes an object to a compound.</summary>
     /// <typeparam name="T">The type to serialize as.</typeparam>
@@ -82,5 +154,13 @@ public static class NbtSerializer
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(type);
         return new NbtConverter(options ?? NbtSerializerOptions.Default).FromTag(tag, type)!;
+    }
+
+    private static NbtTypeInfo GetTypeInfo(Type type, NbtSerializerContext context)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(context);
+        return context.GetTypeInfo(type) ??
+            throw new ArgumentException($"{context.GetType().Name} does not include {type}. Add [NbtSerializable(typeof(...))] for it.", nameof(type));
     }
 }

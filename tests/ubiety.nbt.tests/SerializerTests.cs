@@ -236,7 +236,7 @@ public class SerializerTests
         Assert.Throws<NotSupportedException>(() => NbtSerializer.SerializeToTag(new Queue<int>()));
     }
 
-    private static Player SamplePlayer() => new()
+    internal static Player SamplePlayer() => new()
     {
         Name = "Steve",
         Health = 20f,

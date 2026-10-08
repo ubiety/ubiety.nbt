@@ -38,9 +38,9 @@ internal enum NbtTypeKind
 /// </summary>
 [RequiresUnreferencedCode(NbtSerializer.ReflectionWarning)]
 [RequiresDynamicCode(NbtSerializer.ReflectionWarning)]
-internal sealed class NbtTypeInfo
+internal sealed class ReflectionTypeInfo
 {
-    private static readonly ConcurrentDictionary<Type, NbtTypeInfo> Cache = new();
+    private static readonly ConcurrentDictionary<Type, ReflectionTypeInfo> Cache = new();
 
     private static readonly Type[] ListInterfaces =
     [
@@ -49,7 +49,7 @@ internal sealed class NbtTypeInfo
 
     private static readonly Type[] DictionaryInterfaces = [typeof(IDictionary<,>), typeof(IReadOnlyDictionary<,>)];
 
-    private NbtTypeInfo(Type type, NbtTypeKind kind, Type? elementType = null)
+    private ReflectionTypeInfo(Type type, NbtTypeKind kind, Type? elementType = null)
     {
         Type = type;
         Kind = kind;
@@ -74,7 +74,7 @@ internal sealed class NbtTypeInfo
     /// <summary>Gets the <c>Key</c> and <c>Value</c> properties of a dictionary's entries.</summary>
     public (PropertyInfo Key, PropertyInfo Value)? EntryProperties { get; private init; }
 
-    public IReadOnlyList<NbtMemberInfo> Members { get; private init; } = [];
+    public IReadOnlyList<ReflectionMemberInfo> Members { get; private init; } = [];
 
     /// <summary>Gets the constructor to call, or <see langword="null"/> to create a default struct.</summary>
     public ConstructorInfo? Constructor { get; private init; }
@@ -82,9 +82,9 @@ internal sealed class NbtTypeInfo
     /// <summary>Gets, for each constructor parameter, the index of the member it initializes.</summary>
     public IReadOnlyList<(ParameterInfo Parameter, int MemberIndex)> ConstructorParameters { get; private init; } = [];
 
-    public static NbtTypeInfo Get(Type type) => Cache.GetOrAdd(type, Create);
+    public static ReflectionTypeInfo Get(Type type) => Cache.GetOrAdd(type, Create);
 
-    private static NbtTypeInfo Create(Type type)
+    private static ReflectionTypeInfo Create(Type type)
     {
         if (Nullable.GetUnderlyingType(type) is { } underlying)
         {
@@ -176,7 +176,8 @@ internal sealed class NbtTypeInfo
         }
 
         if (type == typeof(object) || type.IsAbstract || type.IsInterface || type.IsPointer || type.IsByRef ||
-            typeof(IEnumerable).IsAssignableFrom(type) || typeof(Delegate).IsAssignableFrom(type))
+            type.IsPrimitive || type == typeof(decimal) || type == typeof(DateTime) || type == typeof(DateTimeOffset) ||
+            type == typeof(TimeSpan) || typeof(IEnumerable).IsAssignableFrom(type) || typeof(Delegate).IsAssignableFrom(type))
         {
             throw new NotSupportedException(
                 $"Type {type} cannot be serialized to NBT. Use a concrete class or struct, an array, List<T>, or Dictionary<string, T>.");
@@ -185,13 +186,16 @@ internal sealed class NbtTypeInfo
         return CreateObject(type);
     }
 
-    private static NbtTypeInfo CreateObject(Type type)
+    private static ReflectionTypeInfo CreateObject(Type type)
     {
         const BindingFlags Flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-        var members = new List<NbtMemberInfo>();
+        var members = new List<ReflectionMemberInfo>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var property in type.GetProperties(Flags).OrderBy(p => p.MetadataToken))
+        // Members of base classes come first, then declaration order; the source generator matches this.
+        // Deduplication happens in GetProperties' derived-first order, so overrides and hiding members win.
+        var properties = new List<PropertyInfo>();
+        foreach (var property in type.GetProperties(Flags))
         {
             if (property.GetIndexParameters().Length > 0 || property.IsDefined(typeof(NbtIgnoreAttribute)) ||
                 !seen.Add(property.Name))
@@ -199,6 +203,11 @@ internal sealed class NbtTypeInfo
                 continue;
             }
 
+            properties.Add(property);
+        }
+
+        foreach (var property in properties.OrderBy(p => InheritanceDepth(p.DeclaringType!)).ThenBy(p => p.MetadataToken))
+        {
             var attribute = property.GetCustomAttribute<NbtPropertyAttribute>();
             if (property.GetMethod is not { } getter || (!getter.IsPublic && attribute is null))
             {
@@ -206,7 +215,7 @@ internal sealed class NbtTypeInfo
             }
 
             var settable = property.SetMethod is { } setter && (setter.IsPublic || attribute is not null);
-            members.Add(new NbtMemberInfo(
+            members.Add(new ReflectionMemberInfo(
                 property.Name,
                 attribute?.Name,
                 property.PropertyType,
@@ -215,7 +224,7 @@ internal sealed class NbtTypeInfo
                 property.IsDefined(typeof(RequiredMemberAttribute))));
         }
 
-        foreach (var field in type.GetFields(Flags).OrderBy(f => f.MetadataToken))
+        foreach (var field in type.GetFields(Flags).OrderBy(f => InheritanceDepth(f.DeclaringType!)).ThenBy(f => f.MetadataToken))
         {
             var attribute = field.GetCustomAttribute<NbtPropertyAttribute>();
             if ((!field.IsPublic && attribute is null) || field.IsDefined(typeof(NbtIgnoreAttribute)) ||
@@ -224,7 +233,7 @@ internal sealed class NbtTypeInfo
                 continue;
             }
 
-            members.Add(new NbtMemberInfo(
+            members.Add(new ReflectionMemberInfo(
                 field.Name,
                 attribute?.Name,
                 field.FieldType,
@@ -253,6 +262,17 @@ internal sealed class NbtTypeInfo
             Constructor = constructor,
             ConstructorParameters = parameters,
         };
+    }
+
+    private static int InheritanceDepth(Type type)
+    {
+        var depth = 0;
+        for (var current = type.BaseType; current is not null; current = current.BaseType)
+        {
+            depth++;
+        }
+
+        return depth;
     }
 
     private static ConstructorInfo? SelectConstructor(Type type)
@@ -292,7 +312,7 @@ internal sealed class NbtTypeInfo
 /// <summary>
 /// A serialized property or field.
 /// </summary>
-internal sealed record NbtMemberInfo(
+internal sealed record ReflectionMemberInfo(
     string ClrName,
     string? ExplicitName,
     Type Type,

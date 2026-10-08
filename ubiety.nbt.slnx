@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/ubiety.nbt.generators/ubiety.nbt.generators.csproj" />
     <Project Path="src/ubiety.nbt/ubiety.nbt.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ubiety.nbt.generators.tests/ubiety.nbt.generators.tests.csproj" />
     <Project Path="tests/ubiety.nbt.tests/ubiety.nbt.tests.csproj" />
   </Folder>
 </Solution>

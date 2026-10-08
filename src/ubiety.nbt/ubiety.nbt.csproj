@@ -10,10 +10,17 @@
     <Description>Read and write Minecraft NBT (Named Binary Tag) data: Java and Bedrock binary formats, gzip/zlib/LZ4 compression, region files, and SNBT.</Description>
     <PackageTags>nbt;minecraft;snbt;anvil;region</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="ubiety.nbt.tests" />
+  </ItemGroup>
+
+  <!-- Ship the source generator in the package's analyzers folder so consumers get it automatically. -->
+  <ItemGroup>
+    <ProjectReference Include="../ubiety.nbt.generators/ubiety.nbt.generators.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <None Include="../ubiety.nbt.generators/bin/$(Configuration)/netstandard2.0/Ubiety.Nbt.Generators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
 </Project>
