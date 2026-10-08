@@ -6,6 +6,7 @@ A .NET library for reading and writing Minecraft NBT (Named Binary Tag) data.
 - Java Edition (big-endian, Modified UTF-8), Bedrock Edition (little-endian) and Bedrock network (varint) formats
 - GZip, ZLib and LZ4 compression, auto-detected on load
 - SNBT (stringified NBT) formatting and parsing
+- Object serialization, with a source generator for trimmed and Native AOT apps
 - Depth and allocation limits so malformed or hostile input fails cleanly
 
 ## Usage
@@ -69,6 +70,40 @@ NbtCompound compound = NbtSerializer.Serialize(section);
 Public properties and fields are included; `[NbtProperty("key")]` renames or opts in members, `[NbtIgnore]`
 excludes them, and `NbtSerializerOptions.PropertyNamingPolicy` (e.g. `NbtNamingPolicy.SnakeCase`) converts names.
 Null values are omitted. `Guid` uses Minecraft's four-int UUID format, and numeric members accept any integer tag width.
+
+### Trimming and Native AOT
+
+The methods above use reflection. For trimmed or Native AOT apps, declare a partial context listing your root types,
+and the source generator included in the package creates reflection-free metadata for them and every type they reference:
+
+```csharp
+[NbtSerializable(typeof(Section))]
+internal partial class WorldContext : NbtSerializerContext;
+
+var section = NbtSerializer.Deserialize(tag, WorldContext.Default.Section);
+NbtCompound compound = NbtSerializer.Serialize(section, WorldContext.Default.Section);
+```
+
+The context has a property per type, named after it (`Section`, `BlockState`, `ListBlockState`, ...), and the
+output and errors are identical to the reflection-based methods. Pass options through the constructor, and use the
+`Type` overloads when the type is only known at runtime:
+
+```csharp
+var snake = new WorldContext(new NbtSerializerOptions { PropertyNamingPolicy = NbtNamingPolicy.SnakeCase });
+NbtSerializer.Serialize(section, snake.Section);
+
+object value = NbtSerializer.Deserialize(tag, typeof(Section), WorldContext.Default);
+```
+
+Problems are reported at build time instead of at runtime:
+
+| ID | Problem |
+|----|---------|
+| NBTGEN001 | The context isn't a non-generic, non-nested, non-abstract `partial` class deriving from `NbtSerializerContext` |
+| NBTGEN002 | A type has no NBT representation (e.g. `decimal`, `object`, interfaces, abstract classes, other collections) |
+| NBTGEN003 | A type isn't accessible from the context |
+| NBTGEN004 | A type has no usable constructor, or a constructor parameter doesn't match a member |
+| NBTGEN005 | A non-public member of a generic type is serialized |
 
 ### Bedrock level.dat
 
