@@ -39,6 +39,17 @@ string pretty = item.ToSnbt(indented: true);
 NbtTag parsed = NbtTag.ParseSnbt("{Health:20.0f,Pos:[0.5d,64d,0.5d]}");
 ```
 
+### Bedrock level.dat
+
+Bedrock `level.dat` files start with an 8-byte header, which is detected on load and written back on save:
+
+```csharp
+var level = NbtFile.Load("level.dat", NbtFormat.BedrockEdition);
+Console.WriteLine(level.BedrockStorageVersion);   // e.g. 10
+level.Root["LevelName"] = "Renamed";
+level.Save("level.dat");
+```
+
 ### Region files
 
 ```csharp

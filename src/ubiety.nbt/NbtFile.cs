@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.IO.Compression;
 using Ubiety.Nbt.IO;
 
@@ -53,7 +54,18 @@ public sealed class NbtFile
     /// <summary>Gets or sets the compression used when saving. Set by <c>Load</c> to the compression that was detected.</summary>
     public NbtCompression Compression { get; set; } = NbtCompression.None;
 
-    /// <summary>Loads an NBT file, detecting gzip or zlib compression automatically.</summary>
+    /// <summary>
+    /// Gets or sets the storage version from a Bedrock Edition <c>level.dat</c> header, or <see langword="null"/> if
+    /// the file has no header. When set, saving writes the 8-byte header (storage version, then payload length,
+    /// both little-endian) before the NBT data.
+    /// </summary>
+    /// <remarks>
+    /// <c>Load</c> with <see cref="NbtFormat.BedrockEdition"/> detects the header automatically. Saving with a
+    /// header requires <see cref="NbtFormat.BedrockEdition"/> and <see cref="NbtCompression.None"/>.
+    /// </remarks>
+    public int? BedrockStorageVersion { get; set; }
+
+    /// <summary>Loads an NBT file, detecting compression and any Bedrock level.dat header automatically.</summary>
     /// <param name="path">The file path.</param>
     /// <param name="format">The binary format of the data.</param>
     /// <returns>The file.</returns>
@@ -64,7 +76,7 @@ public sealed class NbtFile
         return Load(File.ReadAllBytes(path), format);
     }
 
-    /// <summary>Loads NBT data from a byte array, detecting gzip or zlib compression automatically.</summary>
+    /// <summary>Loads NBT data from a byte array, detecting compression and any Bedrock level.dat header automatically.</summary>
     /// <param name="data">The data.</param>
     /// <param name="format">The binary format of the data.</param>
     /// <returns>The file.</returns>
@@ -75,7 +87,7 @@ public sealed class NbtFile
         return Load(new MemoryStream(data, writable: false), format);
     }
 
-    /// <summary>Loads NBT data from a stream, detecting gzip or zlib compression automatically.</summary>
+    /// <summary>Loads NBT data from a stream, detecting compression and any Bedrock level.dat header automatically.</summary>
     /// <param name="stream">The stream. It is read from its current position and left open.</param>
     /// <param name="format">The binary format of the data.</param>
     /// <returns>The file.</returns>
@@ -93,6 +105,10 @@ public sealed class NbtFile
         }
 
         var compression = DetectCompression(stream);
+        var storageVersion = format == NbtFormat.BedrockEdition && compression == NbtCompression.None
+            ? ReadBedrockHeader(stream)
+            : null;
+
         var input = compression switch
         {
             NbtCompression.GZip => new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true),
@@ -110,7 +126,12 @@ public sealed class NbtFile
                 throw new NbtFormatException($"Expected a compound root tag but found {root.TagType}.");
             }
 
-            return new NbtFile(compound, name) { Format = format, Compression = compression };
+            return new NbtFile(compound, name)
+            {
+                Format = format,
+                Compression = compression,
+                BedrockStorageVersion = storageVersion,
+            };
         }
         catch (InvalidDataException e)
         {
@@ -125,7 +146,7 @@ public sealed class NbtFile
         }
     }
 
-    /// <summary>Loads an NBT file asynchronously, detecting gzip or zlib compression automatically.</summary>
+    /// <summary>Loads an NBT file asynchronously, detecting compression and any Bedrock level.dat header automatically.</summary>
     /// <param name="path">The file path.</param>
     /// <param name="format">The binary format of the data.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
@@ -137,7 +158,7 @@ public sealed class NbtFile
         return Load(await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false), format);
     }
 
-    /// <summary>Loads NBT data from a stream asynchronously, detecting gzip or zlib compression automatically.</summary>
+    /// <summary>Loads NBT data from a stream asynchronously, detecting compression and any Bedrock level.dat header automatically.</summary>
     /// <param name="stream">The stream. It is read to the end and left open.</param>
     /// <param name="format">The binary format of the data.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
@@ -234,6 +255,27 @@ public sealed class NbtFile
         };
     }
 
+    // Consumes and returns a Bedrock level.dat header if one is present; otherwise leaves the stream untouched.
+    private static int? ReadBedrockHeader(Stream stream)
+    {
+        var position = stream.Position;
+        Span<byte> header = stackalloc byte[9];
+        var read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
+
+        // A headerless file starts with a compound type byte and its name length, which can't produce a length
+        // field equal to the remaining data followed by a compound type byte.
+        if (read == header.Length &&
+            BinaryPrimitives.ReadInt32LittleEndian(header[4..]) == stream.Length - position - 8 &&
+            header[8] == (byte)NbtTagType.Compound)
+        {
+            stream.Position = position + 8;
+            return BinaryPrimitives.ReadInt32LittleEndian(header);
+        }
+
+        stream.Position = position;
+        return null;
+    }
+
     private static byte[] ReadToEnd(Stream stream)
     {
         using var buffer = new MemoryStream();
@@ -244,10 +286,29 @@ public sealed class NbtFile
     // Returns the encoded tag, LZ4 compressed if requested; GZip and ZLib are applied by the caller as it writes.
     private MemoryStream Serialize()
     {
+        if (BedrockStorageVersion is not null &&
+            (Format != NbtFormat.BedrockEdition || Compression != NbtCompression.None))
+        {
+            throw new InvalidOperationException(
+                $"A Bedrock level.dat header requires the {NbtFormat.BedrockEdition} format and no compression.");
+        }
+
         var buffer = new MemoryStream();
+        if (BedrockStorageVersion is { } version)
+        {
+            Span<byte> header = stackalloc byte[8];
+            BinaryPrimitives.WriteInt32LittleEndian(header, version);
+            buffer.Write(header);
+        }
+
         using (var writer = new NbtBinaryWriter(buffer, Format, leaveOpen: true))
         {
             writer.WriteTag(Root, RootName);
+        }
+
+        if (BedrockStorageVersion is not null)
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(buffer.GetBuffer().AsSpan(4), (int)buffer.Length - 8);
         }
 
         if (Compression == NbtCompression.Lz4)
