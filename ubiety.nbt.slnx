@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ubiety.nbt/ubiety.nbt.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ubiety.nbt.tests/ubiety.nbt.tests.csproj" />
+  </Folder>
+</Solution>

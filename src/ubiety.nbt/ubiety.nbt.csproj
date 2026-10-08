@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Ubiety.Nbt</RootNamespace>
+    <AssemblyName>Ubiety.Nbt</AssemblyName>
+    <PackageId>Ubiety.Nbt</PackageId>
+    <Description>Read and write Minecraft NBT (Named Binary Tag) data: Java and Bedrock binary formats, gzip/zlib compression, and SNBT.</Description>
+    <PackageTags>nbt;minecraft;snbt</PackageTags>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>
