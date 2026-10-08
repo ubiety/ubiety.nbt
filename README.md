@@ -39,6 +39,37 @@ string pretty = item.ToSnbt(indented: true);
 NbtTag parsed = NbtTag.ParseSnbt("{Health:20.0f,Pos:[0.5d,64d,0.5d]}");
 ```
 
+### Object serialization
+
+Map compounds to your own classes, structs and records:
+
+```csharp
+using Ubiety.Nbt.Serialization;
+
+record BlockState(string Name, Dictionary<string, string>? Properties);
+
+class Section
+{
+    public sbyte Y { get; set; }
+
+    [NbtProperty("block_states")]
+    public PalettedContainer? BlockStates { get; set; }
+}
+
+class PalettedContainer
+{
+    [NbtProperty("palette")] public List<BlockState> Palette { get; set; } = [];
+    [NbtProperty("data")] public long[]? Data { get; set; }
+}
+
+var section = NbtSerializer.Deserialize<Section>(chunk.GetList("sections")[0]);
+NbtCompound compound = NbtSerializer.Serialize(section);
+```
+
+Public properties and fields are included; `[NbtProperty("key")]` renames or opts in members, `[NbtIgnore]`
+excludes them, and `NbtSerializerOptions.PropertyNamingPolicy` (e.g. `NbtNamingPolicy.SnakeCase`) converts names.
+Null values are omitted. `Guid` uses Minecraft's four-int UUID format, and numeric members accept any integer tag width.
+
 ### Bedrock level.dat
 
 Bedrock `level.dat` files start with an 8-byte header, which is detected on load and written back on save:
