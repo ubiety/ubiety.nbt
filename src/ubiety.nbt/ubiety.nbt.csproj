@@ -7,9 +7,13 @@
     <RootNamespace>Ubiety.Nbt</RootNamespace>
     <AssemblyName>Ubiety.Nbt</AssemblyName>
     <PackageId>Ubiety.Nbt</PackageId>
-    <Description>Read and write Minecraft NBT (Named Binary Tag) data: Java and Bedrock binary formats, gzip/zlib compression, and SNBT.</Description>
-    <PackageTags>nbt;minecraft;snbt</PackageTags>
+    <Description>Read and write Minecraft NBT (Named Binary Tag) data: Java and Bedrock binary formats, gzip/zlib/LZ4 compression, region files, and SNBT.</Description>
+    <PackageTags>nbt;minecraft;snbt;anvil;region</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ubiety.nbt.tests" />
+  </ItemGroup>
 
 </Project>

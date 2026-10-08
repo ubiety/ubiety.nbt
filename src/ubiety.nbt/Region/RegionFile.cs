@@ -141,7 +141,7 @@ public sealed partial class RegionFile : IDisposable
     /// <param name="chunkZ">The chunk Z coordinate.</param>
     /// <returns>The chunk's root compound, or <see langword="null"/> if the chunk does not exist.</returns>
     /// <exception cref="NbtFormatException">The chunk data is corrupt.</exception>
-    /// <exception cref="NotSupportedException">The chunk uses LZ4 or custom compression.</exception>
+    /// <exception cref="NotSupportedException">The chunk uses custom compression.</exception>
     public NbtCompound? ReadChunk(int chunkX, int chunkZ)
     {
         ObjectDisposedException.ThrowIf(!_stream.CanRead, this);
@@ -195,7 +195,10 @@ public sealed partial class RegionFile : IDisposable
     /// <param name="chunkX">The chunk X coordinate.</param>
     /// <param name="chunkZ">The chunk Z coordinate.</param>
     /// <param name="chunk">The chunk's root compound.</param>
-    /// <param name="compression">The compression to use. Minecraft uses <see cref="NbtCompression.ZLib"/> by default.</param>
+    /// <param name="compression">
+    /// The compression to use. Minecraft uses <see cref="NbtCompression.ZLib"/> by default, and
+    /// <see cref="NbtCompression.Lz4"/> when the server sets <c>region-file-compression=lz4</c>.
+    /// </param>
     public void WriteChunk(int chunkX, int chunkZ, NbtCompound chunk, NbtCompression compression = NbtCompression.ZLib)
     {
         ArgumentNullException.ThrowIfNull(chunk);
@@ -206,6 +209,7 @@ public sealed partial class RegionFile : IDisposable
             NbtCompression.GZip => (byte)1,
             NbtCompression.ZLib => (byte)2,
             NbtCompression.None => (byte)3,
+            NbtCompression.Lz4 => (byte)4,
             _ => throw new ArgumentOutOfRangeException(nameof(compression), compression, "Unknown compression."),
         };
 
@@ -291,7 +295,7 @@ public sealed partial class RegionFile : IDisposable
             1 => new GZipStream(raw, CompressionMode.Decompress),
             2 => new ZLibStream(raw, CompressionMode.Decompress),
             3 => (Stream)raw,
-            4 => throw new NotSupportedException("LZ4-compressed chunks are not supported."),
+            4 => new MemoryStream(Lz4BlockStream.Decode(data), writable: false),
             127 => throw new NotSupportedException("Chunks with custom compression are not supported."),
             _ => throw new NbtFormatException($"Unknown chunk compression type {compressionType}."),
         };
@@ -311,18 +315,22 @@ public sealed partial class RegionFile : IDisposable
     private static byte[] Encode(NbtCompound chunk, NbtCompression compression)
     {
         using var output = new MemoryStream();
-        using (var compressor = compression switch
+        Stream? compressor = compression switch
         {
             NbtCompression.GZip => new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true),
             NbtCompression.ZLib => new ZLibStream(output, CompressionLevel.Optimal, leaveOpen: true),
-            _ => (Stream)output,
-        })
-        using (var writer = new NbtBinaryWriter(compressor, NbtFormat.JavaEdition, leaveOpen: true))
+            _ => null,
+        };
+
+        using (var writer = new NbtBinaryWriter(compressor ?? output, NbtFormat.JavaEdition, leaveOpen: true))
         {
             writer.WriteTag(chunk);
         }
 
-        return output.ToArray();
+        compressor?.Dispose();
+        return compression == NbtCompression.Lz4
+            ? Lz4BlockStream.Encode(output.GetBuffer().AsSpan(0, (int)output.Length))
+            : output.ToArray();
     }
 
     [GeneratedRegex(@"^r\.(-?\d+)\.(-?\d+)\.mc[ar]$", RegexOptions.CultureInvariant)]

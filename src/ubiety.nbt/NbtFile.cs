@@ -97,6 +97,7 @@ public sealed class NbtFile
         {
             NbtCompression.GZip => new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true),
             NbtCompression.ZLib => new ZLibStream(stream, CompressionMode.Decompress, leaveOpen: true),
+            NbtCompression.Lz4 => new MemoryStream(Lz4BlockStream.Decode(ReadToEnd(stream)), writable: false),
             _ => stream,
         };
 
@@ -165,7 +166,7 @@ public sealed class NbtFile
     {
         ArgumentNullException.ThrowIfNull(stream);
         using var raw = Serialize();
-        if (Compression == NbtCompression.None)
+        if (Compression is NbtCompression.None or NbtCompression.Lz4)
         {
             raw.CopyTo(stream);
             return;
@@ -193,7 +194,7 @@ public sealed class NbtFile
     {
         ArgumentNullException.ThrowIfNull(stream);
         using var raw = Serialize();
-        if (Compression == NbtCompression.None)
+        if (Compression is NbtCompression.None or NbtCompression.Lz4)
         {
             await raw.CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
             return;
@@ -214,24 +215,44 @@ public sealed class NbtFile
 
     private static NbtCompression DetectCompression(Stream stream)
     {
-        // Uncompressed NBT starts with a tag type (0-12), which can't be confused with either magic byte.
+        // Uncompressed NBT starts with a tag type (0-12), which can't be confused with any of the magic bytes.
         var position = stream.Position;
-        var first = stream.ReadByte();
+        Span<byte> magic = stackalloc byte[8];
+        var read = stream.ReadAtLeast(magic, magic.Length, throwOnEndOfStream: false);
         stream.Position = position;
-        return first switch
+        if (read == 0)
+        {
+            return NbtCompression.None;
+        }
+
+        return magic[0] switch
         {
             0x1F => NbtCompression.GZip,
             0x78 => NbtCompression.ZLib,
+            _ when Lz4BlockStream.HasMagic(magic[..read]) => NbtCompression.Lz4,
             _ => NbtCompression.None,
         };
     }
 
+    private static byte[] ReadToEnd(Stream stream)
+    {
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
+    }
+
+    // Returns the encoded tag, LZ4 compressed if requested; GZip and ZLib are applied by the caller as it writes.
     private MemoryStream Serialize()
     {
         var buffer = new MemoryStream();
         using (var writer = new NbtBinaryWriter(buffer, Format, leaveOpen: true))
         {
             writer.WriteTag(Root, RootName);
+        }
+
+        if (Compression == NbtCompression.Lz4)
+        {
+            buffer = new MemoryStream(Lz4BlockStream.Encode(buffer.GetBuffer().AsSpan(0, (int)buffer.Length)), writable: false);
         }
 
         buffer.Position = 0;

@@ -4,7 +4,7 @@ A .NET library for reading and writing Minecraft NBT (Named Binary Tag) data.
 
 - All 13 tag types, with implicit conversions from .NET primitives and arrays
 - Java Edition (big-endian, Modified UTF-8), Bedrock Edition (little-endian) and Bedrock network (varint) formats
-- GZip / ZLib compression, auto-detected on load
+- GZip, ZLib and LZ4 compression, auto-detected on load
 - SNBT (stringified NBT) formatting and parsing
 - Depth and allocation limits so malformed or hostile input fails cleanly
 
@@ -58,7 +58,8 @@ region.DeleteChunk(5, 8);
 ```
 
 Chunks over ~1 MiB are stored in `c.<x>.<z>.mcc` files alongside the region, as Minecraft does.
-LZ4-compressed chunks (an opt-in server setting since 1.20.5) are not supported yet.
+LZ4-compressed chunks (`region-file-compression=lz4`, available since 1.20.5) are read automatically;
+pass `NbtCompression.Lz4` to `WriteChunk` to write them.
 
 ### Embedded NBT
 

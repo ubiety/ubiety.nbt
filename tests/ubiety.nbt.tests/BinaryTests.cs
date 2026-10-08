@@ -42,6 +42,7 @@ public class BinaryTests
     [InlineData(NbtCompression.None)]
     [InlineData(NbtCompression.GZip)]
     [InlineData(NbtCompression.ZLib)]
+    [InlineData(NbtCompression.Lz4)]
     public void DetectsCompression(NbtCompression compression)
     {
         var data = new NbtFile(Samples.AllTypes()) { Compression = compression }.ToArray();

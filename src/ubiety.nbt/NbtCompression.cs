@@ -13,4 +13,10 @@ public enum NbtCompression
 
     /// <summary>ZLib (RFC 1950), used by Java Edition region file chunks.</summary>
     ZLib,
+
+    /// <summary>
+    /// LZ4 in lz4-java's <c>LZ4BlockOutputStream</c> framing, an optional region file chunk compression
+    /// since Java Edition 1.20.5. This is not the standard LZ4 frame format.
+    /// </summary>
+    Lz4,
 }

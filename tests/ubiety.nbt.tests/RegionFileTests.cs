@@ -38,6 +38,7 @@ public sealed class RegionFileTests : IDisposable
     [InlineData(NbtCompression.None)]
     [InlineData(NbtCompression.GZip)]
     [InlineData(NbtCompression.ZLib)]
+    [InlineData(NbtCompression.Lz4)]
     public void RoundTripsChunksAcrossReopen(NbtCompression compression)
     {
         var path = PathFor(0, 0);
@@ -162,18 +163,33 @@ public sealed class RegionFileTests : IDisposable
     }
 
     [Fact]
-    public void ReportsUnsupportedLz4Chunks()
+    public void ReportsUnsupportedCustomCompression()
     {
         var path = PathFor(0, 0);
         var file = new byte[3 * RegionFile.SectorSize];
         BinaryPrimitives.WriteInt32BigEndian(file, (2 << 8) | 1);
         BinaryPrimitives.WriteInt32BigEndian(file.AsSpan(2 * RegionFile.SectorSize), 2);
-        file[(2 * RegionFile.SectorSize) + 4] = 4;
+        file[(2 * RegionFile.SectorSize) + 4] = 127;
         File.WriteAllBytes(path, file);
 
         using var region = RegionFile.Open(path, readOnly: true);
 
         Assert.Throws<NotSupportedException>(() => region.ReadChunk(0, 0));
+    }
+
+    [Fact]
+    public void StoresLz4ChunksWithTypeFour()
+    {
+        var path = PathFor(0, 0);
+        using (var region = RegionFile.Open(path))
+        {
+            region.WriteChunk(0, 0, Chunk(0, 0), NbtCompression.Lz4);
+        }
+
+        var bytes = File.ReadAllBytes(path);
+
+        Assert.Equal(4, bytes[(2 * RegionFile.SectorSize) + 4]);
+        Assert.Equal("LZ4Block"u8.ToArray(), bytes.AsSpan((2 * RegionFile.SectorSize) + 5, 8).ToArray());
     }
 
     [Fact]
