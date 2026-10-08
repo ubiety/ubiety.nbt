@@ -39,6 +39,29 @@ string pretty = item.ToSnbt(indented: true);
 NbtTag parsed = NbtTag.ParseSnbt("{Health:20.0f,Pos:[0.5d,64d,0.5d]}");
 ```
 
+### Region files
+
+```csharp
+using Ubiety.Nbt.Region;
+
+using var region = RegionFile.Open("world/region/r.0.0.mca");
+foreach (var (x, z) in region.GetChunkPositions())
+{
+    var chunk = region.ReadChunk(x, z)!;
+    Console.WriteLine($"{x},{z}: {chunk.GetString("Status")}");
+}
+
+var spawn = region.ReadChunk(0, 0)!;
+spawn["InhabitedTime"] = 0L;
+region.WriteChunk(0, 0, spawn);   // zlib by default, like Minecraft
+region.DeleteChunk(5, 8);
+```
+
+Chunks over ~1 MiB are stored in `c.<x>.<z>.mcc` files alongside the region, as Minecraft does.
+LZ4-compressed chunks (an opt-in server setting since 1.20.5) are not supported yet.
+
+### Embedded NBT
+
 For network packets or other embedded NBT, use `NbtBinaryReader` / `NbtBinaryWriter` directly.
 `ReadNamelessTag` / `WriteNamelessTag` handle the nameless root used by Java Edition since 1.20.2.
 
