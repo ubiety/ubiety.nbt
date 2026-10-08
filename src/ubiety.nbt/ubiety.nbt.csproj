@@ -7,7 +7,7 @@
     <RootNamespace>Ubiety.Nbt</RootNamespace>
     <AssemblyName>Ubiety.Nbt</AssemblyName>
     <PackageId>Ubiety.Nbt</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
