@@ -8,14 +8,37 @@
     <AssemblyName>Ubiety.Nbt</AssemblyName>
     <PackageId>Ubiety.Nbt</PackageId>
     <Version>0.1.0</Version>
-    <Description>Read and write Minecraft NBT (Named Binary Tag) data: Java and Bedrock binary formats, gzip/zlib/LZ4 compression, region files, and SNBT.</Description>
-    <PackageTags>nbt;minecraft;snbt;anvil;region</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
+  <!-- Package metadata -->
+  <PropertyGroup>
+    <Description>Read and write Minecraft NBT (Named Binary Tag) data: Java and Bedrock binary formats, gzip/zlib/LZ4 compression, region files, SNBT, and object serialization with a source generator for trimming and Native AOT.</Description>
+    <Company>Ubiety Technologies</Company>
+    <Authors>Dieter Lunn</Authors>
+    <Copyright>Copyright © Ubiety Technologies 2026</Copyright>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/ubiety/ubiety.nbt</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ubiety/ubiety.nbt.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>nbt;minecraft;snbt;anvil;region;bedrock;serialization;aot</PackageTags>
+
+    <!-- Source Link -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="ubiety.nbt.tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
 
   <!-- Ship the source generator in the package's analyzers folder so consumers get it automatically. -->

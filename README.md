@@ -148,3 +148,7 @@ For network packets or other embedded NBT, use `NbtBinaryReader` / `NbtBinaryWri
 ```
 dotnet test ubiety.nbt.slnx
 ```
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
